@@ -1,19 +1,17 @@
 #include <WiFi.h>
-#include <WebServer.h>
+#include <ESP32WebServer.h>
+#include <ESP32Servo.h>
 
-const char* SSID     = "Controle_LED_PWM";
+const char* SSID     = "Controle_Servo_ESP32";
 const char* PASSWORD = "12345678";
 
 #define SERVO_PIN 4        
-#define PWM_FREQ 50        
-#define PWM_RES 10         
 
-const int DUTY_MIN = 26;   
-const int DUTY_MAX = 128;  
+Servo meuServo;
 
 int current_angle = 90;
 
-WebServer server(80);
+ESP32WebServer server(80);
 
 const char* HTML_SERVO = R"rawhtml(
 <!DOCTYPE html>
@@ -79,12 +77,10 @@ void handleSetServo() {
     int angle = sAngle.toInt();
     angle = constrain(angle, 0, 180);
     
-    int duty = map(angle, 0, 180, DUTY_MIN, DUTY_MAX);
-    
-    ledcWrite(SERVO_PIN, duty);
+    meuServo.write(angle);
     current_angle = angle;
 
-    Serial.printf("[SERVO] Angulo: %d° | Duty Aplicado: %d/1023\n", angle, duty);
+    Serial.printf("[SERVO] Angulo definido: %d°\n", angle);
     server.send(200, "application/json", "{\"status\":\"ok\"}");
   } else {
     server.send(400, "text/plain", "Parâmetro ausente.");
@@ -96,10 +92,17 @@ void handleRoot() { server.send(200, "text/html", HTML_SERVO); }
 void setup() {
   Serial.begin(115200);
 
-  ledcAttach(SERVO_PIN, PWM_FREQ, PWM_RES);
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+
+  meuServo.setPeriodHertz(50); 
   
-  int initialDuty = map(current_angle, 0, 180, DUTY_MIN, DUTY_MAX);
-  ledcWrite(SERVO_PIN, initialDuty);
+
+  meuServo.attach(SERVO_PIN, 500, 2400); 
+  
+  meuServo.write(current_angle);
 
   WiFi.softAP(SSID, PASSWORD);
   Serial.printf("Ponto de Acesso Iniciado. IP: http://%s\n", WiFi.softAPIP().toString().c_str());
