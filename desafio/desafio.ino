@@ -1,17 +1,15 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESP32Servo.h>
 
-const char* SSID     = "Controle_LED_PWM";
+const char* SSID     = "Controle_Servo_ESP32";
 const char* PASSWORD = "12345678";
 
 #define SERVO_PIN 4
-#define FREQ_SERVO 50
-#define RES_SERVO 10
-const int SERVO_MIN = 26;
-const int SERVO_MAX = 128;
-
 #define LED_PIN 2
 #define RES_LED 8
+
+Servo meuServo;
 
 int current_angle = 90;
 int current_led_freq = 5000;
@@ -104,7 +102,7 @@ function enviarLed() {
     try {
       let r = await fetch(`/updateLed?freq=${freq}&duty=${duty}`);
       let d = await r.json();
-      document.getElementById("statusText").textContent = `LED atualizado! Freq real: ${d.freq_real} Hz`;
+      document.getElementById("statusText").textContent = `LED updated! Freq real: ${d.freq_real} Hz`;
     } catch(e) { document.getElementById("statusText").textContent = "Erro de conexão com o LED"; }
   }, 50);
 }
@@ -165,11 +163,10 @@ void handleUpdateServo() {
     int angle = sAngle.toInt();
     angle = constrain(angle, 0, 180);
 
-    int duty = map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
-    ledcWrite(SERVO_PIN, duty);
+    meuServo.write(angle);
 
     current_angle = angle;
-    Serial.printf("[PAINEL] SERVO -> Ângulo: %d° | Duty: %d/1023\n", angle, duty);
+    Serial.printf("[PAINEL] SERVO -> Ângulo: %d°\n", angle);
 
     server.send(200, "application/json", "{\"status\":\"ok\"}");
   } else {
@@ -184,9 +181,14 @@ void handleNotFound() {
 void setup() {
   Serial.begin(115200);
 
-  ledcAttach(SERVO_PIN, FREQ_SERVO, RES_SERVO);
-  int initServoDuty = map(current_angle, 0, 180, SERVO_MIN, SERVO_MAX);
-  ledcWrite(SERVO_PIN, initServoDuty);
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+
+  meuServo.setPeriodHertz(50); 
+  meuServo.attach(SERVO_PIN, 500, 2400); 
+  meuServo.write(current_angle);
 
   ledcAttach(LED_PIN, current_led_freq, RES_LED);
   ledcWrite(LED_PIN, current_led_duty);
