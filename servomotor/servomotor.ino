@@ -11,7 +11,7 @@ Servo meuServo;
 
 int current_angle = 90;
 
-WebServer server(80);
+ESP32WebServer server(80);
 
 const char* HTML_SERVO = R"rawhtml(
 <!DOCTYPE html>
