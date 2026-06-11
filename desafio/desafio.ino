@@ -1,19 +1,16 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESP32Servo.h>
 
-const char* SSID     = "Controle_LED_PWM";
+const char* SSID     = "Controle_Servo_ESP32";
 const char* PASSWORD = "12345678";
 
 #define SERVO_PIN 4
-#define FREQ_SERVO 50
-#define RES_SERVO 10
-const int SERVO_MIN = 26;
-const int SERVO_MAX = 128;
+#define LED_PIN   8 
 
-#define LED_PIN 2
-#define RES_LED 8
+Servo meuServo;
 
-int current_angle = 90;
+int current_angle    = 90;
 int current_led_freq = 5000;
 int current_led_duty = 128;
 
@@ -43,7 +40,6 @@ const char* HTML_PAINEL = R"rawhtml(
     input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; }
     #ledDuty::-webkit-slider-thumb, #ledFreq::-webkit-slider-thumb { background: #10b981; }
     #servoAngle::-webkit-slider-thumb { background: #f59e0b; }
-    
     .preview-box { display: flex; justify-content: space-around; align-items: center; background: #22263a; border: 1px solid #2e3347; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     .preview-item { text-align: center; font-size: 0.75rem; color: #64748b; }
     .led-preview { width: 25px; height: 25px; border-radius: 50%; background: #10b981; margin: 8px auto 0; box-shadow: 0 0 15px #10b981; transition: opacity 0.05s; }
@@ -56,7 +52,7 @@ const char* HTML_PAINEL = R"rawhtml(
 <div class="container">
   <div class="card">
     <h1>Painel Integrado de Atuadores</h1>
-    
+
     <h2>Controle do LED Externo</h2>
     <div class="control-group">
       <label>Frequência: <span class="val-display led-txt" id="ledFreqVal">5000 Hz</span></label>
@@ -69,7 +65,7 @@ const char* HTML_PAINEL = R"rawhtml(
 
     <h2>Controle do Servomotor</h2>
     <div class="control-group">
-      <label>Ângulo do Braço: <span class="val-display servo-txt" id="servoAngleVal">90°</span></label>
+      <label>Ângulo do Braço: <span class="val-display servo-txt" id="servoAngleVal">90</span></label>
       <input type="range" id="servoAngle" min="0" max="180" value="90" oninput="enviarServo()">
     </div>
 
@@ -88,39 +84,39 @@ const char* HTML_PAINEL = R"rawhtml(
 </div>
 
 <script>
-let ledTimeout = null;
+let ledTimeout   = null;
 let servoTimeout = null;
 
 function enviarLed() {
   var freq = document.getElementById("ledFreq").value;
   var duty = document.getElementById("ledDuty").value;
-  
-  document.getElementById("ledFreqVal").textContent = freq + " Hz";
-  document.getElementById("ledDutyVal").textContent = Math.round((duty / 255) * 100) + "%";
+  document.getElementById("ledFreqVal").textContent  = freq + " Hz";
+  document.getElementById("ledDutyVal").textContent  = Math.round((duty / 255) * 100) + "%";
   document.getElementById("ledVisual").style.opacity = duty / 255;
-
   clearTimeout(ledTimeout);
   ledTimeout = setTimeout(async () => {
     try {
       let r = await fetch(`/updateLed?freq=${freq}&duty=${duty}`);
       let d = await r.json();
       document.getElementById("statusText").textContent = `LED atualizado! Freq real: ${d.freq_real} Hz`;
-    } catch(e) { document.getElementById("statusText").textContent = "Erro de conexão com o LED"; }
+    } catch(e) {
+      document.getElementById("statusText").textContent = "Erro de conexao com o LED";
+    }
   }, 50);
 }
 
 function enviarServo() {
   var angulo = document.getElementById("servoAngle").value;
-  
-  document.getElementById("servoAngleVal").textContent = angulo + "°";
+  document.getElementById("servoAngleVal").textContent = angulo;
   document.getElementById("servoVisual").style.transform = `rotate(${angulo - 90}deg)`;
-
   clearTimeout(servoTimeout);
   servoTimeout = setTimeout(async () => {
     try {
       await fetch(`/updateServo?angle=${angulo}`);
-      document.getElementById("statusText").textContent = `Servo posicionado em ${angulo}°`;
-    } catch(e) { document.getElementById("statusText").textContent = "Erro de conexão com o Servo"; }
+      document.getElementById("statusText").textContent = `Servo posicionado em ${angulo}`;
+    } catch(e) {
+      document.getElementById("statusText").textContent = "Erro de conexao com o Servo";
+    }
   }, 40);
 }
 
@@ -131,78 +127,70 @@ enviarServo();
 </html>
 )rawhtml";
 
-void handleRoot() { 
-  server.send(200, "text/html", HTML_PAINEL); 
+void handleRoot() {
+  server.send(200, "text/html", HTML_PAINEL);
 }
 
 void handleUpdateLed() {
   String sFreq = server.arg("freq");
   String sDuty = server.arg("duty");
-
   if (sFreq != "" && sDuty != "") {
-    int reqFreq = sFreq.toInt();
-    int reqDuty = sDuty.toInt();
+    int reqFreq = constrain(sFreq.toInt(), 10, 20000);
+    int reqDuty = constrain(sDuty.toInt(), 0, 255);
 
-    ledcAttach(LED_PIN, reqFreq, RES_LED);
+    ledcChangeFrequency(LED_PIN, reqFreq, 8);
     ledcWrite(LED_PIN, reqDuty);
 
     current_led_freq = reqFreq;
     current_led_duty = reqDuty;
-
-    Serial.printf("[PAINEL] LED -> Freq: %d Hz | Duty: %d\n", reqFreq, reqDuty);
-
-    String json = "{\"status\":\"ok\",\"freq_real\":" + String(reqFreq) + "}";
-    server.send(200, "application/json", json);
+    Serial.printf("[LED] Freq: %d Hz | Duty: %d\n", reqFreq, reqDuty);
+    server.send(200, "application/json",
+      "{\"status\":\"ok\",\"freq_real\":" + String(reqFreq) + "}");
   } else {
-    server.send(400, "text/plain", "Faltam parâmetros do LED.");
+    server.send(400, "text/plain", "Faltam parametros do LED.");
   }
 }
 
 void handleUpdateServo() {
   String sAngle = server.arg("angle");
-
   if (sAngle != "") {
-    int angle = sAngle.toInt();
-    angle = constrain(angle, 0, 180);
-
-    int duty = map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
-    ledcWrite(SERVO_PIN, duty);
-
+    int angle = constrain(sAngle.toInt(), 0, 180);
+    meuServo.write(angle);
     current_angle = angle;
-    Serial.printf("[PAINEL] SERVO -> Ângulo: %d° | Duty: %d/1023\n", angle, duty);
-
+    Serial.printf("[SERVO] Angulo: %d graus\n", angle);
     server.send(200, "application/json", "{\"status\":\"ok\"}");
   } else {
-    server.send(400, "text/plain", "Falta o parâmetro ângulo.");
+    server.send(400, "text/plain", "Falta o parametro angulo.");
   }
-}
-
-void handleNotFound() { 
-  server.send(404, "text/plain", "404: Não Encontrado"); 
 }
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
 
-  ledcAttach(SERVO_PIN, FREQ_SERVO, RES_SERVO);
-  int initServoDuty = map(current_angle, 0, 180, SERVO_MIN, SERVO_MAX);
-  ledcWrite(SERVO_PIN, initServoDuty);
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
 
-  ledcAttach(LED_PIN, current_led_freq, RES_LED);
+  meuServo.setPeriodHertz(50);
+  meuServo.attach(SERVO_PIN, 500, 2400);
+
+  delay(500); meuServo.write(0);
+  delay(800); meuServo.write(90);
+  delay(800); meuServo.write(180);
+  delay(800); meuServo.write(current_angle);
+
+  ledcAttach(LED_PIN, current_led_freq, 8);
   ledcWrite(LED_PIN, current_led_duty);
 
   WiFi.softAP(SSID, PASSWORD);
-  Serial.printf("\n==================================\n");
-  Serial.printf("Painel de Atuadores ESP32 Pronto!\n");
-  Serial.printf("SSID: %s\n", SSID);
-  Serial.printf("Acesse o IP: http://%s\n", WiFi.softAPIP().toString().c_str());
-  Serial.printf("==================================\n");
+  delay(500);
+  Serial.printf("IP: http://%s\n", WiFi.softAPIP().toString().c_str());
 
-  server.on("/", handleRoot);
-  server.on("/updateLed", handleUpdateLed);
+  server.on("/",            handleRoot);
+  server.on("/updateLed",   handleUpdateLed);
   server.on("/updateServo", handleUpdateServo);
-  server.onNotFound(handleNotFound);
-
   server.begin();
 }
 
