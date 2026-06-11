@@ -1,19 +1,16 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* SSID     = "Painel_Controle_ESP32";
+const char* SSID     = "Controle_LED_PWM";
 const char* PASSWORD = "12345678";
 
-
 #define SERVO_PIN 4
-#define CHAN_SERVO 0
 #define FREQ_SERVO 50
 #define RES_SERVO 10
 const int SERVO_MIN = 26;
 const int SERVO_MAX = 128;
 
 #define LED_PIN 2
-#define CHAN_LED 1
 #define RES_LED 8
 
 int current_angle = 90;
@@ -47,7 +44,6 @@ const char* HTML_PAINEL = R"rawhtml(
     #ledDuty::-webkit-slider-thumb, #ledFreq::-webkit-slider-thumb { background: #10b981; }
     #servoAngle::-webkit-slider-thumb { background: #f59e0b; }
     
-    /* Área de Feedback/Simulação Visual */
     .preview-box { display: flex; justify-content: space-around; align-items: center; background: #22263a; border: 1px solid #2e3347; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     .preview-item { text-align: center; font-size: 0.75rem; color: #64748b; }
     .led-preview { width: 25px; height: 25px; border-radius: 50%; background: #10b981; margin: 8px auto 0; box-shadow: 0 0 15px #10b981; transition: opacity 0.05s; }
@@ -99,12 +95,10 @@ function enviarLed() {
   var freq = document.getElementById("ledFreq").value;
   var duty = document.getElementById("ledDuty").value;
   
-  // Atualiza UI local instantaneamente
   document.getElementById("ledFreqVal").textContent = freq + " Hz";
   document.getElementById("ledDutyVal").textContent = Math.round((duty / 255) * 100) + "%";
   document.getElementById("ledVisual").style.opacity = duty / 255;
 
-  // Filtro Debounce para o LED
   clearTimeout(ledTimeout);
   ledTimeout = setTimeout(async () => {
     try {
@@ -118,11 +112,9 @@ function enviarLed() {
 function enviarServo() {
   var angulo = document.getElementById("servoAngle").value;
   
-  // Atualiza UI local instantaneamente
   document.getElementById("servoAngleVal").textContent = angulo + "°";
   document.getElementById("servoVisual").style.transform = `rotate(${angulo - 90}deg)`;
 
-  // Filtro Debounce para o Servo
   clearTimeout(servoTimeout);
   servoTimeout = setTimeout(async () => {
     try {
@@ -132,14 +124,12 @@ function enviarServo() {
   }, 40);
 }
 
-// Inicialização visual
 enviarLed();
 enviarServo();
 </script>
 </body>
 </html>
 )rawhtml";
-
 
 void handleRoot() { 
   server.send(200, "text/html", HTML_PAINEL); 
@@ -153,15 +143,15 @@ void handleUpdateLed() {
     int reqFreq = sFreq.toInt();
     int reqDuty = sDuty.toInt();
 
-    uint32_t realFreq = ledcSetup(CHAN_LED, reqFreq, RES_LED);
-    ledcWrite(CHAN_LED, reqDuty);
+    ledcAttach(LED_PIN, reqFreq, RES_LED);
+    ledcWrite(LED_PIN, reqDuty);
 
     current_led_freq = reqFreq;
     current_led_duty = reqDuty;
 
-    Serial.printf("[PAINEL] LED -> Freq: %u Hz | Duty: %d\n", realFreq, reqDuty);
+    Serial.printf("[PAINEL] LED -> Freq: %d Hz | Duty: %d\n", reqFreq, reqDuty);
 
-    String json = "{\"status\":\"ok\",\"freq_real\":" + String(realFreq) + "}";
+    String json = "{\"status\":\"ok\",\"freq_real\":" + String(reqFreq) + "}";
     server.send(200, "application/json", json);
   } else {
     server.send(400, "text/plain", "Faltam parâmetros do LED.");
@@ -176,7 +166,7 @@ void handleUpdateServo() {
     angle = constrain(angle, 0, 180);
 
     int duty = map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
-    ledcWrite(CHAN_SERVO, duty);
+    ledcWrite(SERVO_PIN, duty);
 
     current_angle = angle;
     Serial.printf("[PAINEL] SERVO -> Ângulo: %d° | Duty: %d/1023\n", angle, duty);
@@ -191,18 +181,15 @@ void handleNotFound() {
   server.send(404, "text/plain", "404: Não Encontrado"); 
 }
 
-
 void setup() {
   Serial.begin(115200);
 
-  ledcSetup(CHAN_SERVO, FREQ_SERVO, RES_SERVO);
-  ledcAttachPin(SERVO_PIN, CHAN_SERVO);
+  ledcAttach(SERVO_PIN, FREQ_SERVO, RES_SERVO);
   int initServoDuty = map(current_angle, 0, 180, SERVO_MIN, SERVO_MAX);
-  ledcWrite(CHAN_SERVO, initServoDuty);
+  ledcWrite(SERVO_PIN, initServoDuty);
 
-  ledcSetup(CHAN_LED, current_led_freq, RES_LED);
-  ledcAttachPin(LED_PIN, CHAN_LED);
-  ledcWrite(CHAN_LED, current_led_duty);
+  ledcAttach(LED_PIN, current_led_freq, RES_LED);
+  ledcWrite(LED_PIN, current_led_duty);
 
   WiFi.softAP(SSID, PASSWORD);
   Serial.printf("\n==================================\n");

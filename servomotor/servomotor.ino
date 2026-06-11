@@ -1,17 +1,15 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* SSID     = "Controle_Servo_ESP32";
+const char* SSID     = "Controle_LED_PWM";
 const char* PASSWORD = "12345678";
 
 #define SERVO_PIN 4        
-#define PWM_CHANNEL 0      
-#define PWM_FREQ 50        //frequencia do servo 50hz
-#define PWM_RES 10         // Resolução de 10 bits (valores de 0 a 1023)
+#define PWM_FREQ 50        
+#define PWM_RES 10         
 
-
-const int DUTY_MIN = 26;   // Ajuste fino para ~0.5ms (Garante alcance de 0°)
-const int DUTY_MAX = 128;  // Ajuste fino para ~2.5ms (Garante alcance de 180°)
+const int DUTY_MIN = 26;   
+const int DUTY_MAX = 128;  
 
 int current_angle = 90;
 
@@ -83,7 +81,7 @@ void handleSetServo() {
     
     int duty = map(angle, 0, 180, DUTY_MIN, DUTY_MAX);
     
-    ledcWrite(PWM_CHANNEL, duty);
+    ledcWrite(SERVO_PIN, duty);
     current_angle = angle;
 
     Serial.printf("[SERVO] Angulo: %d° | Duty Aplicado: %d/1023\n", angle, duty);
@@ -98,11 +96,10 @@ void handleRoot() { server.send(200, "text/html", HTML_SERVO); }
 void setup() {
   Serial.begin(115200);
 
-  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RES);
-  ledcAttachPin(SERVO_PIN, PWM_CHANNEL);
+  ledcAttach(SERVO_PIN, PWM_FREQ, PWM_RES);
   
   int initialDuty = map(current_angle, 0, 180, DUTY_MIN, DUTY_MAX);
-  ledcWrite(PWM_CHANNEL, initialDuty);
+  ledcWrite(SERVO_PIN, initialDuty);
 
   WiFi.softAP(SSID, PASSWORD);
   Serial.printf("Ponto de Acesso Iniciado. IP: http://%s\n", WiFi.softAPIP().toString().c_str());

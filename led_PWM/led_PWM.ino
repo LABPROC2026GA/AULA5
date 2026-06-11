@@ -5,11 +5,10 @@ const char* SSID     = "Controle_LED_PWM";
 const char* PASSWORD = "12345678";
 
 #define LED_PIN 2
-#define PWM_CHANNEL 0      // Canal do LEDC (0-15)
-#define PWM_RESOLUTION 8   // Resolução de 8 bits (Valores de duty cycle(brilho) de 0 a 255)
+#define PWM_RESOLUTION 8   
 
-int current_frequency = 5000; // 5 kHz padrão
-int current_duty = 128;        // ~50% de intensidade padrão
+int current_frequency = 5000; 
+int current_duty = 128;        
 
 WebServer server(80);
 
@@ -113,19 +112,18 @@ void handleUpdate() {
     int reqFreq = sFreq.toInt();
     int reqDuty = sDuty.toInt();
 
-    uint32_t realFreq = ledcSetup(PWM_CHANNEL, reqFreq, PWM_RESOLUTION);
-    
-    ledcWrite(PWM_CHANNEL, reqDuty);
+    ledcAttach(LED_PIN, reqFreq, PWM_RESOLUTION);
+    ledcWrite(LED_PIN, reqDuty);
 
     current_frequency = reqFreq;
     current_duty = reqDuty;
 
-    Serial.printf("[PWM] Freq requisitada: %d Hz | Freq Real: %u Hz | Duty: %d/255 (%d%%)\n", 
-                  reqFreq, realFreq, reqDuty, (reqDuty * 100) / 255);
+    Serial.printf("[PWM] Freq requisitada: %d Hz | Duty: %d/255 (%d%%)\n", 
+                  reqFreq, reqDuty, (reqDuty * 100) / 255);
 
     String json = "{";
     json += "\"status\":\"sucesso\",";
-    json += "\"freq_real\":" + String(realFreq) + ",";
+    json += "\"freq_real\":" + String(reqFreq) + ",";
     json += "\"duty_percent\":" + String((reqDuty * 100) / 255);
     json += "}";
     
@@ -141,9 +139,8 @@ void handleNotFound() { server.send(404, "text/plain", "404 Not Found"); }
 void setup() {
   Serial.begin(115200);
 
-  ledcSetup(PWM_CHANNEL, current_frequency, PWM_RESOLUTION);
-  ledcAttachPin(LED_PIN, PWM_CHANNEL);
-  ledcWrite(PWM_CHANNEL, current_duty); // Inicializa com 50%
+  ledcAttach(LED_PIN, current_frequency, PWM_RESOLUTION);
+  ledcWrite(LED_PIN, current_duty); 
 
   WiFi.softAP(SSID, PASSWORD);
   Serial.printf("WiFi criado! SSID: %s | IP: %s\n", SSID, WiFi.softAPIP().toString().c_str());
